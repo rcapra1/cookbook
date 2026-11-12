@@ -1,0 +1,132 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: recipes
+    // Document ID: auto-generated {recipeId}
+    // Fields:
+    //   - contributorName: string (required, 1..120 chars)
+    //   - familyBranch: string (required, 1..120 chars)
+    //   - title: string (required, 1..160 chars)
+    //   - category: string (required, 1..60 chars)
+    //   - difficulty: string (optional, 0..40 chars)
+    //   - prepTime: string (optional, 0..40 chars)
+    //   - cookTime: string (optional, 0..40 chars)
+    //   - servings: string (optional, 0..40 chars)
+    //   - story: string (optional, 0..2000 chars)
+    //   - tips: string (optional, 0..1500 chars)
+    //   - ingredients: list (required, 1..50 items)
+    //   - steps: list (required, 1..50 items)
+    //   - photoDataUrl: string (optional, 0..800000 chars)
+    //   - passcode: string (required, must match class passcode)
+    //   - createdAt: timestamp (required, must equal request.time)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function isValidString(data, field, minLen, maxLen) {
+      return data[field] is string &&
+             data[field].size() >= minLen &&
+             data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) ||
+             (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidList(data, field, minSize, maxSize) {
+      return data[field] is list &&
+             data[field].size() >= minSize &&
+             data[field].size() <= maxSize;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidRecipe(data) {
+      return hasOnlyAllowedFields(data, [
+               'contributorName',
+               'familyBranch',
+               'title',
+               'category',
+               'difficulty',
+               'prepTime',
+               'cookTime',
+               'servings',
+               'story',
+               'tips',
+               'ingredients',
+               'steps',
+               'photoDataUrl',
+               'passcode',
+               'createdAt'
+             ]) &&
+             hasRequiredFields(data, [
+               'contributorName',
+               'familyBranch',
+               'title',
+               'category',
+               'ingredients',
+               'steps',
+               'passcode',
+               'createdAt'
+             ]) &&
+             // TEACHER NOTE: Update 'COOKBOOK2026' below if you change
+             // CLASS_PASSCODE in index.html, then redeploy these rules.
+             data.passcode is string &&
+             data.passcode == 'COOKBOOK2026' &&
+             isValidString(data, 'contributorName', 1, 120) &&
+             isValidString(data, 'familyBranch', 1, 120) &&
+             isValidString(data, 'title', 1, 160) &&
+             isValidString(data, 'category', 1, 60) &&
+             isValidOptionalString(data, 'difficulty', 40) &&
+             isValidOptionalString(data, 'prepTime', 40) &&
+             isValidOptionalString(data, 'cookTime', 40) &&
+             isValidOptionalString(data, 'servings', 40) &&
+             isValidOptionalString(data, 'story', 2000) &&
+             isValidOptionalString(data, 'tips', 1500) &&
+             isValidList(data, 'ingredients', 1, 50) &&
+             isValidList(data, 'steps', 1, 50) &&
+             isValidOptionalString(data, 'photoDataUrl', 800000) &&
+             data.createdAt is timestamp &&
+             data.createdAt == request.time;
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Shared class cookbook gallery: anyone can read recipes,
+    // anyone with the class passcode can submit a valid new recipe,
+    // and students cannot overwrite or delete existing recipes
+    // (the teacher can edit or delete recipes in the Firebase Console).
+    match /recipes/{recipeId} {
+      allow read: if true;
+      allow create: if isValidRecipe(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    // Explicit default deny for all other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
